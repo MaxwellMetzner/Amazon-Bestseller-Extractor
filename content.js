@@ -1,5 +1,52 @@
 (() => {
+  let extractionTimeout;
+  let hasResults = false;
+  let resultsFound = false; // Track if results have ever been found
+
+  function isAmazonProductPage() {
+    const { pathname } = window.location;
+    const pathOk = /(\/dp\/|\/gp\/product\/)/i.test(pathname);
+    return pathOk;
+  }
+
+  function updateBadge() {
+    const count = window.__bsr_links?.length || 0;
+    const foundResults = count > 0;
+
+    // Once results are found, keep badge on until page reload
+    if (foundResults) {
+      resultsFound = true;
+    }
+
+    const shouldShow = resultsFound;
+
+    // Always reassert badge if we should show; clear only on state change
+    if (shouldShow || shouldShow !== hasResults) {
+      hasResults = shouldShow;
+      chrome.runtime.sendMessage({
+        type: 'UPDATE_BADGE',
+        hasResults: shouldShow
+      }).catch(err => {
+        // Extension might be updating, silently fail
+        console.debug('Badge update failed:', err);
+      });
+    }
+  }
+
+  function toAbsolute(hrefVal) {
+    if (!hrefVal) return null;
+    try {
+      return new URL(hrefVal, window.location.origin).href;
+    } catch (e) {
+      return null; // Ignore malformed URLs
+    }
+  }
+
   function extractBSRLinks() {
+    if (!isAmazonProductPage()) {
+      window.__bsr_links = [];
+      return;
+    }
     try {
       const result = [];
       const seen = new Set();
@@ -13,14 +60,16 @@
             spans.forEach(span => {
               const link = span.querySelector('a');
               const match = link?.parentElement?.textContent?.match(/#(\d+) in ([^\(]+)/);
-              if (match && link) {
+              const hrefVal = link?.getAttribute('href');
+              const absoluteHref = toAbsolute(hrefVal);
+              if (match && link && absoluteHref) {
                 const key = `#${match[1]}|${match[2].trim()}`;
                 if (!seen.has(key)) {
                   seen.add(key);
                   result.push({
                     rank: `#${match[1]}`,
                     category: match[2].trim(),
-                    href: new URL(link.getAttribute('href'), window.location.origin).href,
+                    href: absoluteHref,
                     anchorText: link.textContent.trim()
                   });
                 }
@@ -38,7 +87,9 @@
 
           anchors.forEach(anchor => {
             const match = anchor.parentElement?.textContent?.match(/#(\d+[\d,]*) in ([^\(]+)/);
-            if (match) {
+            const hrefVal = anchor.getAttribute('href');
+            const absoluteHref = toAbsolute(hrefVal);
+            if (match && absoluteHref) {
               const rank = `#${match[1].replace(/,/g, '')}`;
               const category = match[2].trim();
               const key = `${rank}|${category}`;
@@ -47,7 +98,7 @@
                 result.push({
                   rank: `#${match[1]}`,
                   category,
-                  href: new URL(anchor.getAttribute('href'), window.location.origin).href,
+                  href: absoluteHref,
                   anchorText: anchor.textContent.trim()
                 });
               }
@@ -77,30 +128,32 @@
       });
 
       window.__bsr_links = result;
+      updateBadge();
     } catch (e) {
       console.error('BSR extraction failed:', e);
       window.__bsr_links = [];
+      updateBadge();
     }
   }
 
-  extractBSRLinks();
+  // Initial extraction
+  if (isAmazonProductPage()) {
+    extractBSRLinks();
+  }
 
+  // Debounced MutationObserver to handle dynamic content efficiently
   const targetNode = document.getElementById('detailBulletsWrapper_feature_div') || document.body;
-  const observer = new MutationObserver((mutationsList, observer) => {
-    for (const mutation of mutationsList) {
-      if (mutation.addedNodes.length > 0) {
-        const hasDetailBullets = document.querySelector('#detailBulletsWrapper_feature_div li');
-        if (hasDetailBullets) {
-          extractBSRLinks();
-          observer.disconnect();
-          break;
-        }
-      }
-    }
+  const observer = new MutationObserver(() => {
+    clearTimeout(extractionTimeout);
+    extractionTimeout = setTimeout(() => {
+      extractBSRLinks();
+    }, 300); // Debounce to avoid excessive extractions
   });
 
-  observer.observe(targetNode, {
-    childList: true,
-    subtree: true
-  });
+  if (isAmazonProductPage()) {
+    observer.observe(targetNode, {
+      childList: true,
+      subtree: true
+    });
+  }
 })();

@@ -4,8 +4,12 @@
   "version": "1.0",
   "description": "Extracts Best Sellers Rank links from Amazon product pages.",
   "permissions": ["activeTab", "scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_badge_background_color": "#FF0000"
   },
   "content_scripts": [
     {
