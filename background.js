@@ -1,9 +1,9 @@
 const tabState = {};
 
-function setBadge(tabId, on) {
+function setBadge(tabId, on, lowestRank = null) {
   if (on) {
     chrome.action.setBadgeText({
-      text: ' ', // Blank text renders the badge; Chrome size is fixed
+      text: lowestRank ? String(lowestRank) : ' ',
       tabId
     });
     chrome.action.setBadgeBackgroundColor({
@@ -25,13 +25,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     const hasResults = !!message.hasResults;
     const url = sender.tab?.url;
+    const lowestRank = message.lowestRank || null;
 
     tabState[tabId] = {
       hasResults,
-      url
+      url,
+      lowestRank
     };
 
-    setBadge(tabId, hasResults);
+    setBadge(tabId, hasResults, lowestRank);
     sendResponse({ success: true });
   }
 });
@@ -39,7 +41,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Restore badge when switching tabs based on stored state
 chrome.tabs.onActivated.addListener((activeInfo) => {
   const state = tabState[activeInfo.tabId];
-  setBadge(activeInfo.tabId, state?.hasResults);
+  setBadge(activeInfo.tabId, state?.hasResults, state?.lowestRank);
 });
 
 // Clear badge only on true navigation to a new URL (ignoring hash changes)

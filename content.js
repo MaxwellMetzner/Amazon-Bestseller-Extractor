@@ -10,12 +10,27 @@
   }
 
   function updateBadge() {
-    const count = window.__bsr_links?.length || 0;
+    const links = window.__bsr_links || [];
+    const count = links.length;
     const foundResults = count > 0;
 
     // Once results are found, keep badge on until page reload
     if (foundResults) {
       resultsFound = true;
+    }
+
+    // Calculate the lowest (best) rank number
+    let lowestRank = null;
+    if (links.length > 0) {
+      const rankNumbers = links.map(link => {
+        // Extract numeric value from rank string like "#3" or "#142"
+        const match = link.rank.match(/#?(\d+)/);
+        return match ? parseInt(match[1], 10) : Infinity;
+      }).filter(n => n !== Infinity);
+      
+      if (rankNumbers.length > 0) {
+        lowestRank = Math.min(...rankNumbers);
+      }
     }
 
     const shouldShow = resultsFound;
@@ -25,7 +40,8 @@
       hasResults = shouldShow;
       chrome.runtime.sendMessage({
         type: 'UPDATE_BADGE',
-        hasResults: shouldShow
+        hasResults: shouldShow,
+        lowestRank: lowestRank
       }).catch(err => {
         // Extension might be updating, silently fail
         console.debug('Badge update failed:', err);
