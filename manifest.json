@@ -3,17 +3,40 @@
   "name": "Amazon BSR Extractor",
   "version": "1.0",
   "description": "Extracts Best Sellers Rank links from Amazon product pages.",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["declarativeContent"],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
+    "default_state": "disabled",
     "default_popup": "popup.html",
     "default_badge_background_color": "#FF0000"
   },
   "content_scripts": [
     {
-      "matches": ["*://www.amazon.com/*"],
+      "matches": [
+        "*://www.amazon.com/*",
+        "*://www.amazon.ca/*",
+        "*://www.amazon.com.mx/*",
+        "*://www.amazon.com.br/*",
+        "*://www.amazon.com.au/*",
+        "*://www.amazon.co.uk/*",
+        "*://www.amazon.de/*",
+        "*://www.amazon.fr/*",
+        "*://www.amazon.it/*",
+        "*://www.amazon.es/*",
+        "*://www.amazon.nl/*",
+        "*://www.amazon.se/*",
+        "*://www.amazon.pl/*",
+        "*://www.amazon.com.tr/*",
+        "*://www.amazon.ae/*",
+        "*://www.amazon.sa/*",
+        "*://www.amazon.sg/*",
+        "*://www.amazon.co.jp/*",
+        "*://www.amazon.in/*",
+        "*://www.amazon.eg/*",
+        "*://www.amazon.com.be/*"
+      ],
       "js": ["content.js"]
     }
   ]

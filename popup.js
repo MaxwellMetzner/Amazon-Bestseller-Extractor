@@ -4,53 +4,53 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const container = document.getElementById('links');
+  const camelContainer = document.getElementById('camel-link-container');
 
-  // Disallow chrome:// pages
-  if (!tab || !tab.url || tab.url.startsWith('chrome://')) {
+  if (!tab?.id) {
     container.textContent = 'Not available on this page.';
     return;
   }
 
-  chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: () => window.__bsr_links || []
-  }, (results) => {
-    const links = results?.[0]?.result || [];
-    container.innerHTML = '';
-    if (!Array.isArray(links) || links.length === 0) {
-      container.textContent = 'No Best Sellers Rank links found.';
+  chrome.tabs.sendMessage(tab.id, { type: 'GET_BSR_DATA' }, (response) => {
+    if (chrome.runtime.lastError || !response) {
+      container.textContent = 'Available only on Amazon product pages.';
       return;
     }
 
-    const currentTabUrl = tab.url; // Get current tab URL
+    const { isAmazonProductPage, links, pageUrl } = response;
 
-    links.forEach(({ rank, category, href, anchorText }) => {
-      if (href === currentTabUrl) return; // Skip self-link
-      if (!href) return;
+    container.innerHTML = '';
+    if (!isAmazonProductPage) {
+      container.textContent = 'Open an Amazon product page to view BSR links.';
+      return;
+    }
 
-      const card = document.createElement('a');
-      card.className = 'link-card';
-      card.href = href;
-      card.target = '_blank';
-      card.rel = 'noopener noreferrer';
-      card.innerHTML = `<span class="rank">${rank}</span> in ${category} (${anchorText})`;
-      container.appendChild(card);
-    });
-  });
+    if (!Array.isArray(links) || links.length === 0) {
+      container.textContent = 'No Best Sellers Rank links found.';
+    } else {
+      links.forEach(({ rank, category, href, anchorText }) => {
+        if (href === pageUrl) return;
+        if (!href) return;
 
-  // Add CamelCamelCamel link
-  const currentTabUrl = tab.url;
-  if (currentTabUrl && currentTabUrl.match(/\/dp\/|\/gp\/product\//)) {
-    const camelUrl = getCamelCamelCamelUrl(currentTabUrl);
+        const card = document.createElement('a');
+        card.className = 'link-card';
+        card.href = href;
+        card.target = '_blank';
+        card.rel = 'noopener noreferrer';
+        card.innerHTML = `<span class="rank">${rank}</span> in ${category} (${anchorText})`;
+        container.appendChild(card);
+      });
+    }
+
+    const camelUrl = getCamelCamelCamelUrl(pageUrl);
     if (camelUrl) {
-      const camelContainer = document.getElementById('camel-link-container');
       const camelLink = document.createElement('a');
       camelLink.href = camelUrl;
       camelLink.target = '_blank';
       camelLink.textContent = 'View Price History on CamelCamelCamel';
       camelContainer.appendChild(camelLink);
     }
-  }
+  });
 });
 
 function getCamelCamelCamelUrl(amazonUrl) {

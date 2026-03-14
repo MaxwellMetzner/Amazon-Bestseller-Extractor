@@ -1,43 +1,101 @@
 # Amazon Bestseller Extractor
 
-A Chrome extension that instantly shows you the Best Sellers Rank (BSR) of any product while you browse Amazon.
+> A focused Chrome extension for reading Amazon Best Sellers Rank data directly from product pages, without asking for access to the rest of the web.
 
-## What it does
+Amazon Bestseller Extractor watches supported Amazon product pages, surfaces the strongest Best Sellers Rank as a toolbar badge, and opens a compact popup with the full category breakdown.
 
-When you visit an Amazon product page, the extension automatically scans the page for Best Sellers Rank information. If the product has BSR data, you'll see a **red badge** appear on the extension icon in your toolbar showing the product's best (lowest) rank number across all of its categories.
+## Highlights
 
-Click the extension icon to open a popup listing every BSR category the product ranks in, along with its rank and a direct link to that category page on Amazon. The popup also includes a link to view the product's price history on CamelCamelCamel.
+- Shows the best BSR value as a toolbar badge when rank data exists.
+- Lists every detected BSR category and link in a clean popup.
+- Adds a quick CamelCamelCamel shortcut for the current ASIN.
+- Supports multiple Amazon storefronts.
+- Stays disabled outside supported Amazon domains.
+- Avoids broad page access permissions.
 
-### The badge
+## How It Works
 
-The red numbered badge on the extension icon is the product's **best rank** - i.e., the lowest rank number found across all of its BSR categories. A lower number means the product sells better in that category. For example, a badge showing **3** means the product is the #3 best seller in at least one of its categories.
+1. Open a supported Amazon storefront.
+2. Visit a product page with a `/dp/` or `/gp/product/` URL.
+3. The extension scans the page for Best Sellers Rank data.
+4. If rank data exists, the toolbar badge shows the best rank found.
+5. Click the extension icon to open the full BSR breakdown.
 
-- **Badge visible** - the product has BSR data; click the icon to see the full breakdown.
-- **No badge** - the current page is not an Amazon product page, or the product has no BSR information.
+## What You See
 
-### Theme options
+### Toolbar badge
 
-The popup supports three visual themes - Amazon, Dark, and Slate - which you can cycle through using the theme button inside the popup.
+The red badge shows the best available rank on the page, meaning the lowest numeric rank found across all categories.
 
-## Recommended: pin the extension
+- Badge visible: rank data was found on the current product page.
+- No badge: the page is not a supported Amazon product page, or Amazon did not expose BSR data.
 
-To see the badge at a glance while browsing Amazon, **pin the extension** to your toolbar:
+### Popup
 
-1. Click the puzzle-piece icon (Extensions) in the Chrome toolbar.
-2. Find **Amazon BSR Extractor** in the list.
-3. Click the pin icon next to it.
+The popup includes:
 
-The extension icon will now always be visible, and you'll see the red rank badge appear automatically whenever you land on an Amazon product page.
+- A card list of detected BSR categories and links.
+- A direct CamelCamelCamel link for the current product.
+- Three built-in visual themes: Amazon, Dark, and Slate.
+
+## Permission Model
+
+This project is intentionally scoped down.
+
+- The toolbar action is disabled by default.
+- It only lights up on supported Amazon storefront domains.
+- Content scripts run only on supported Amazon domains.
+- The popup reads data from the Amazon content script instead of injecting code into arbitrary active tabs.
+- No extracted data is sent to external servers.
+
+## Supported Amazon Domains
+
+- amazon.com
+- amazon.ca
+- amazon.com.mx
+- amazon.com.br
+- amazon.com.au
+- amazon.co.uk
+- amazon.de
+- amazon.fr
+- amazon.it
+- amazon.es
+- amazon.nl
+- amazon.se
+- amazon.pl
+- amazon.com.tr
+- amazon.ae
+- amazon.sa
+- amazon.sg
+- amazon.co.jp
+- amazon.in
+- amazon.eg
+- amazon.com.be
+
+## Install Locally
+
+1. Clone or download this repository.
+2. Open `chrome://extensions/` in Chrome.
+3. Enable Developer mode.
+4. Click Load unpacked.
+5. Select this project folder.
+6. Pin the extension if you want the badge visible at all times.
 
 ## Privacy
 
-- Runs only on amazon.com product pages you open.
-- Reads the page content to find BSR categories and links; **nothing is sent to external servers**.
-- Uses Chrome permissions `activeTab` and `scripting` solely to read the current page.
+- Reads only the currently open supported Amazon page.
+- Extracts BSR links from the DOM already present in the page.
+- Sends nothing to a backend, database, or third-party API.
+- Does not request broad temporary access to every site you browse.
 
-## Install as an unpacked extension
+## Development Notes
 
-1. Clone or download this repository.
-2. In Chrome, open `chrome://extensions/` and turn on **Developer mode**.
-3. Click **Load unpacked** and select the folder containing this project.
-4. Pin the extension (see above) and visit any Amazon product page.
+- Built as a Manifest V3 Chrome extension.
+- Badge state is maintained per tab.
+- Action availability is controlled declaratively for supported Amazon hosts.
+
+## Roadmap Ideas
+
+- Add storefront coverage for additional Amazon domains if needed.
+- Improve extraction resilience for alternate Amazon product layouts.
+- Add lightweight test fixtures for multiple product page formats.

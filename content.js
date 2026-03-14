@@ -152,6 +152,18 @@
     }
   }
 
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type !== 'GET_BSR_DATA') {
+      return;
+    }
+
+    sendResponse({
+      isAmazonProductPage: isAmazonProductPage(),
+      pageUrl: window.location.href,
+      links: Array.isArray(window.__bsr_links) ? window.__bsr_links : []
+    });
+  });
+
   // Initial extraction
   if (isAmazonProductPage()) {
     extractBSRLinks();
