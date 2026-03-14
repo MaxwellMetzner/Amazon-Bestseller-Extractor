@@ -10,14 +10,14 @@ Click the extension icon to open a popup listing every BSR category the product 
 
 ### The badge
 
-The red numbered badge on the extension icon is the product's **best rank** — i.e., the lowest rank number found across all of its BSR categories. A lower number means the product sells better in that category. For example, a badge showing **3** means the product is the #3 best seller in at least one of its categories.
+The red numbered badge on the extension icon is the product's **best rank** - i.e., the lowest rank number found across all of its BSR categories. A lower number means the product sells better in that category. For example, a badge showing **3** means the product is the #3 best seller in at least one of its categories.
 
 - **Badge visible** - the product has BSR data; click the icon to see the full breakdown.
 - **No badge** - the current page is not an Amazon product page, or the product has no BSR information.
 
 ### Theme options
 
-The popup supports three visual themes — Amazon, Dark, and Slate — which you can cycle through using the theme button inside the popup.
+The popup supports three visual themes - Amazon, Dark, and Slate - which you can cycle through using the theme button inside the popup.
 
 ## Recommended: pin the extension
 
