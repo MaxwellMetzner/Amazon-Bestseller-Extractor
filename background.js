@@ -1,110 +1,110 @@
-const tabState = {};
-const AMAZON_HOSTS = [
-  'www.amazon.com',
-  'www.amazon.ca',
-  'www.amazon.com.mx',
-  'www.amazon.com.br',
-  'www.amazon.com.au',
-  'www.amazon.co.uk',
-  'www.amazon.de',
-  'www.amazon.fr',
-  'www.amazon.it',
-  'www.amazon.es',
-  'www.amazon.nl',
-  'www.amazon.se',
-  'www.amazon.pl',
-  'www.amazon.com.tr',
-  'www.amazon.ae',
-  'www.amazon.sa',
-  'www.amazon.sg',
-  'www.amazon.co.jp',
-  'www.amazon.in',
-  'www.amazon.eg',
-  'www.amazon.com.be'
-];
-
-function registerActionRules() {
-  chrome.action.disable();
-
-  chrome.declarativeContent.onPageChanged.removeRules(undefined, () => {
-    const rules = AMAZON_HOSTS.map((host) => ({
-      conditions: [
-        new chrome.declarativeContent.PageStateMatcher({
-          pageUrl: {
-            hostEquals: host,
-            schemes: ['http', 'https']
-          }
-        })
-      ],
-      actions: [new chrome.declarativeContent.ShowAction()]
-    }));
-
-    chrome.declarativeContent.onPageChanged.addRules(rules);
-  });
-}
-
-chrome.runtime.onInstalled.addListener(() => {
-  registerActionRules();
-});
-
-chrome.runtime.onStartup.addListener(() => {
-  registerActionRules();
-});
-
-function setBadge(tabId, on, lowestRank = null) {
-  if (on) {
-    chrome.action.setBadgeText({
-      text: lowestRank ? String(lowestRank) : ' ',
-      tabId
-    });
-    chrome.action.setBadgeBackgroundColor({
-      color: '#FF0000',
-      tabId
-    });
-  } else {
-    chrome.action.setBadgeText({
-      text: '',
-      tabId
-    });
-  }
-}
-
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'UPDATE_BADGE') {
-    const tabId = sender.tab?.id;
-    if (tabId == null) return;
-
-    const hasResults = !!message.hasResults;
-    const url = sender.tab?.url;
-    const lowestRank = message.lowestRank || null;
-
-    tabState[tabId] = {
-      hasResults,
-      url,
-      lowestRank
-    };
-
-    setBadge(tabId, hasResults, lowestRank);
-    sendResponse({ success: true });
-  }
-});
-
-// Restore badge when switching tabs based on stored state
-chrome.tabs.onActivated.addListener((activeInfo) => {
-  const state = tabState[activeInfo.tabId];
-  setBadge(activeInfo.tabId, state?.hasResults, state?.lowestRank);
-});
-
-// Clear badge only on true navigation to a new URL (ignoring hash changes)
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.url) {
-    const prev = tabState[tabId]?.url;
-    const prevNoHash = prev ? prev.split('#')[0] : null;
-    const nextNoHash = changeInfo.url.split('#')[0];
-
-    if (!prevNoHash || prevNoHash !== nextNoHash) {
-      tabState[tabId] = { hasResults: false, url: changeInfo.url };
-      setBadge(tabId, false);
+"use strict";
+(() => {
+    const manifest = chrome.runtime.getManifest();
+    const CONTENT_SCRIPT_HOST_PATTERN = /^\*:\/\/([^/]+)\/\*$/;
+    const BADGE_BACKGROUND_COLOR = manifest.action?.default_badge_background_color ?? '#FF0000';
+    const tabState = new Map();
+    function isRecordValue(value) {
+        return typeof value === 'object' && value !== null;
     }
-  }
-});
+    function isUpdateBadgeRequest(message) {
+        return (isRecordValue(message) &&
+            message.type === 'UPDATE_BADGE' &&
+            typeof message.hasResults === 'boolean' &&
+            (typeof message.lowestRank === 'number' || message.lowestRank === null));
+    }
+    function getSupportedAmazonHosts() {
+        const hosts = new Set();
+        for (const contentScript of manifest.content_scripts ?? []) {
+            for (const matchPattern of contentScript.matches ?? []) {
+                const host = matchPattern.match(CONTENT_SCRIPT_HOST_PATTERN)?.[1];
+                if (host !== undefined) {
+                    hosts.add(host);
+                }
+            }
+        }
+        return [...hosts];
+    }
+    function registerActionRules() {
+        const amazonHosts = getSupportedAmazonHosts();
+        chrome.action.disable();
+        chrome.declarativeContent.onPageChanged.removeRules(undefined, () => {
+            const rules = amazonHosts.map((host) => ({
+                conditions: [
+                    new chrome.declarativeContent.PageStateMatcher({
+                        pageUrl: {
+                            hostEquals: host,
+                            schemes: ['http', 'https']
+                        }
+                    })
+                ],
+                actions: [new chrome.declarativeContent.ShowAction()]
+            }));
+            if (rules.length > 0) {
+                chrome.declarativeContent.onPageChanged.addRules(rules);
+            }
+        });
+    }
+    function setBadge(tabId, isVisible, lowestRank = null) {
+        if (isVisible) {
+            const badgeText = lowestRank === null ? ' ' : String(lowestRank);
+            chrome.action.setBadgeText({
+                text: badgeText,
+                tabId
+            });
+            chrome.action.setBadgeBackgroundColor({
+                color: BADGE_BACKGROUND_COLOR,
+                tabId
+            });
+            return;
+        }
+        chrome.action.setBadgeText({
+            text: '',
+            tabId
+        });
+    }
+    chrome.runtime.onInstalled.addListener(registerActionRules);
+    chrome.runtime.onStartup.addListener(registerActionRules);
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        const incomingMessage = message;
+        if (!isUpdateBadgeRequest(incomingMessage)) {
+            return;
+        }
+        const tabId = sender.tab?.id;
+        if (tabId == null) {
+            return;
+        }
+        const nextState = {
+            hasResults: incomingMessage.hasResults,
+            lowestRank: incomingMessage.lowestRank,
+            ...(typeof sender.tab?.url === 'string' ? { url: sender.tab.url } : {})
+        };
+        tabState.set(tabId, nextState);
+        setBadge(tabId, nextState.hasResults, nextState.lowestRank);
+        sendResponse({ success: true });
+    });
+    chrome.tabs.onActivated.addListener(({ tabId }) => {
+        const state = tabState.get(tabId);
+        setBadge(tabId, state?.hasResults ?? false, state?.lowestRank ?? null);
+    });
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+        if (typeof changeInfo.url !== 'string') {
+            return;
+        }
+        const previousUrl = tabState.get(tabId)?.url;
+        const previousUrlWithoutHash = previousUrl?.split('#')[0] ?? null;
+        const nextUrlWithoutHash = changeInfo.url.split('#')[0];
+        if (previousUrlWithoutHash === nextUrlWithoutHash) {
+            return;
+        }
+        tabState.set(tabId, {
+            hasResults: false,
+            url: changeInfo.url,
+            lowestRank: null
+        });
+        setBadge(tabId, false);
+    });
+    chrome.tabs.onRemoved.addListener((tabId) => {
+        tabState.delete(tabId);
+    });
+})();

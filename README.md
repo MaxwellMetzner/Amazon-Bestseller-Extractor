@@ -75,11 +75,23 @@ This project is intentionally scoped down.
 ## Install Locally
 
 1. Clone or download this repository.
-2. Open `chrome://extensions/` in Chrome.
-3. Enable Developer mode.
-4. Click Load unpacked.
-5. Select this project folder.
-6. Pin the extension if you want the badge visible at all times.
+2. Install the development dependencies with `npm install`.
+3. Build the extension scripts with `npm run build`.
+4. Open `chrome://extensions/` in Chrome.
+5. Enable Developer mode.
+6. Click Load unpacked.
+7. Select this project folder.
+8. Pin the extension if you want the badge visible at all times.
+
+## TypeScript Workflow
+
+Chrome extensions do not execute TypeScript files directly. This project now keeps the source in `src/*.ts` and compiles the browser-facing files to `background.js`, `content.js`, and `popup.js` in the extension root so the manifest can continue to reference JavaScript.
+
+- `npm run build` compiles the TypeScript sources.
+- `npm run typecheck` validates the project without writing output.
+- `npm run watch` recompiles on file changes during development.
+
+If you change any TypeScript source, rebuild before reloading the unpacked extension in Chrome.
 
 ## Privacy
 
@@ -91,6 +103,7 @@ This project is intentionally scoped down.
 ## Development Notes
 
 - Built as a Manifest V3 Chrome extension.
+- Runtime files loaded by Chrome are compiled JavaScript artifacts generated from `src/*.ts`.
 - Badge state is maintained per tab.
 - Action availability is controlled declaratively for supported Amazon hosts.
 

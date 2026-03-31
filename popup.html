@@ -1,6 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Amazon BSR Links</title>
   <style>
     /* Theme palettes */
@@ -94,6 +96,9 @@
       letter-spacing: 0.2px;
       color: var(--text);
     }
+    .panel-title {
+      margin: 0;
+    }
     .link-card {
       margin-bottom: 10px;
       padding: 10px 12px;
@@ -137,7 +142,7 @@
 <body data-theme="amazon">
   <div class="panel">
     <div class="header-row">
-      <h4 style="margin: 0;">Best Sellers Rankings</h4>
+      <h4 class="panel-title">Best Sellers Rankings</h4>
       <button id="theme-toggle" type="button">Amazon</button>
     </div>
     <div id="links" class="muted">Loading...</div>

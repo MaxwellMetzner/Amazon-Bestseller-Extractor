@@ -1,187 +1,191 @@
+"use strict";
 (() => {
-  let extractionTimeout;
-  let hasResults = false;
-  let resultsFound = false; // Track if results have ever been found
-
-  function isAmazonProductPage() {
-    const { pathname } = window.location;
-    const pathOk = /(\/dp\/|\/gp\/product\/)/i.test(pathname);
-    return pathOk;
-  }
-
-  function updateBadge() {
-    const links = window.__bsr_links || [];
-    const count = links.length;
-    const foundResults = count > 0;
-
-    // Once results are found, keep badge on until page reload
-    if (foundResults) {
-      resultsFound = true;
+    const PRODUCT_PAGE_PATH_PATTERN = /(\/dp\/|\/gp\/product\/)/i;
+    const BEST_SELLERS_RANK_LABEL = 'Best Sellers Rank';
+    const PRODUCT_DETAILS_SELECTOR = 'th.prodDetSectionEntry';
+    const DETAIL_BULLETS_ID = 'detailBulletsWrapper_feature_div';
+    const RANK_AND_CATEGORY_PATTERN = /#([\d,]+) in ([^\(]+)/;
+    const INLINE_RANK_AND_CATEGORY_PATTERN = /#([\d,]+) in ([^\n\(]+)/;
+    const EXTRACTION_DEBOUNCE_MS = 300;
+    let extractionTimeout;
+    let hasResults = false;
+    let resultsFound = false;
+    function isRecordValue(value) {
+        return typeof value === 'object' && value !== null;
     }
-
-    // Calculate the lowest (best) rank number
-    let lowestRank = null;
-    if (links.length > 0) {
-      const rankNumbers = links.map(link => {
-        // Extract numeric value from rank string like "#3" or "#142"
-        const match = link.rank.match(/#?(\d+)/);
-        return match ? parseInt(match[1], 10) : Infinity;
-      }).filter(n => n !== Infinity);
-      
-      if (rankNumbers.length > 0) {
-        lowestRank = Math.min(...rankNumbers);
-      }
+    function isGetBsrDataRequest(message) {
+        return isRecordValue(message) && message.type === 'GET_BSR_DATA';
     }
-
-    const shouldShow = resultsFound;
-
-    // Always reassert badge if we should show; clear only on state change
-    if (shouldShow || shouldShow !== hasResults) {
-      hasResults = shouldShow;
-      chrome.runtime.sendMessage({
-        type: 'UPDATE_BADGE',
-        hasResults: shouldShow,
-        lowestRank: lowestRank
-      }).catch(err => {
-        // Extension might be updating, silently fail
-        console.debug('Badge update failed:', err);
-      });
+    function isAmazonProductPage() {
+        return PRODUCT_PAGE_PATH_PATTERN.test(window.location.pathname);
     }
-  }
-
-  function toAbsolute(hrefVal) {
-    if (!hrefVal) return null;
-    try {
-      return new URL(hrefVal, window.location.origin).href;
-    } catch (e) {
-      return null; // Ignore malformed URLs
+    function getStoredLinks() {
+        return Array.isArray(window.__bsr_links) ? window.__bsr_links : [];
     }
-  }
-
-  function extractBSRLinks() {
-    if (!isAmazonProductPage()) {
-      window.__bsr_links = [];
-      return;
+    function setStoredLinks(links) {
+        window.__bsr_links = links;
     }
-    try {
-      const result = [];
-      const seen = new Set();
-      const thElements = document.querySelectorAll('th.prodDetSectionEntry');
-
-      thElements.forEach(th => {
-        if (th.textContent.trim().includes('Best Sellers Rank')) {
-          const td = th.nextElementSibling;
-          if (td) {
-            const spans = td.querySelectorAll('span');
-            spans.forEach(span => {
-              const link = span.querySelector('a');
-              const match = link?.parentElement?.textContent?.match(/#(\d+) in ([^\(]+)/);
-              const hrefVal = link?.getAttribute('href');
-              const absoluteHref = toAbsolute(hrefVal);
-              if (match && link && absoluteHref) {
-                const key = `#${match[1]}|${match[2].trim()}`;
-                if (!seen.has(key)) {
-                  seen.add(key);
-                  result.push({
-                    rank: `#${match[1]}`,
-                    category: match[2].trim(),
-                    href: absoluteHref,
-                    anchorText: link.textContent.trim()
-                  });
-                }
-              }
+    function parseRankValue(rankText) {
+        const match = rankText.match(/#?([\d,]+)/);
+        if (match === null) {
+            return null;
+        }
+        const digits = match[1];
+        if (digits === undefined) {
+            return null;
+        }
+        const numericValue = Number.parseInt(digits.replace(/,/g, ''), 10);
+        return Number.isFinite(numericValue) ? numericValue : null;
+    }
+    function updateBadge() {
+        const links = getStoredLinks();
+        const foundResults = links.length > 0;
+        if (foundResults) {
+            resultsFound = true;
+        }
+        const rankValues = links
+            .map((link) => parseRankValue(link.rank))
+            .filter((value) => value !== null);
+        const lowestRank = rankValues.length > 0 ? Math.min(...rankValues) : null;
+        const shouldShow = resultsFound;
+        if (shouldShow || shouldShow !== hasResults) {
+            hasResults = shouldShow;
+            const message = {
+                type: 'UPDATE_BADGE',
+                hasResults: shouldShow,
+                lowestRank
+            };
+            void chrome.runtime.sendMessage(message).catch((error) => {
+                console.debug('Badge update failed:', error);
             });
-          }
         }
-      });
-
-      // Additional fallback: product detail bullets style
-      const bulletsLi = Array.from(document.querySelectorAll("#detailBulletsWrapper_feature_div li"));
-      bulletsLi.forEach(li => {
-        if (li.textContent.includes("Best Sellers Rank")) {
-          const anchors = li.querySelectorAll("a");
-
-          anchors.forEach(anchor => {
-            const match = anchor.parentElement?.textContent?.match(/#(\d+[\d,]*) in ([^\(]+)/);
-            const hrefVal = anchor.getAttribute('href');
-            const absoluteHref = toAbsolute(hrefVal);
-            if (match && absoluteHref) {
-              const rank = `#${match[1].replace(/,/g, '')}`;
-              const category = match[2].trim();
-              const key = `${rank}|${category}`;
-              if (!seen.has(key)) {
-                seen.add(key);
-                result.push({
-                  rank: `#${match[1]}`,
-                  category,
-                  href: absoluteHref,
-                  anchorText: anchor.textContent.trim()
-                });
-              }
-            }
-          });
-
-          const textMatch = li.innerText.match(/#(\d+[\d,]*) in [^\n]+/);
-          if (textMatch) {
-            const rankText = textMatch[0];
-            const match = rankText.match(/#(\d+[\d,]*) in ([^\(]+)/);
-            if (match) {
-              const rank = `#${match[1].replace(/,/g, '')}`;
-              const category = match[2].trim();
-              const key = `${rank}|${category}`;
-              if (!seen.has(key)) {
-                seen.add(key);
-                result.push({
-                  rank: `#${match[1]}`,
-                  category,
-                  href: window.location.href,
-                  anchorText: category
-                });
-              }
-            }
-          }
+    }
+    function toAbsolute(hrefValue) {
+        if (hrefValue === null || hrefValue.length === 0) {
+            return null;
         }
-      });
-
-      window.__bsr_links = result;
-      updateBadge();
-    } catch (e) {
-      console.error('BSR extraction failed:', e);
-      window.__bsr_links = [];
-      updateBadge();
+        try {
+            return new URL(hrefValue, window.location.origin).href;
+        }
+        catch {
+            return null;
+        }
     }
-  }
-
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message?.type !== 'GET_BSR_DATA') {
-      return;
+    function pushUniqueResult(results, seen, rankDigits, categoryValue, href, anchorTextValue) {
+        const category = categoryValue.trim();
+        const rank = `#${rankDigits.trim()}`;
+        const key = `${rank}|${category}`;
+        if (seen.has(key)) {
+            return;
+        }
+        seen.add(key);
+        results.push({
+            rank,
+            category,
+            href,
+            anchorText: anchorTextValue.trim()
+        });
     }
-
-    sendResponse({
-      isAmazonProductPage: isAmazonProductPage(),
-      pageUrl: window.location.href,
-      links: Array.isArray(window.__bsr_links) ? window.__bsr_links : []
+    function pushMatchedResult(results, seen, match, href, anchorTextValue) {
+        const rankDigits = match[1];
+        const category = match[2];
+        if (rankDigits === undefined || category === undefined) {
+            return;
+        }
+        pushUniqueResult(results, seen, rankDigits, category, href, anchorTextValue?.trim() || category.trim());
+    }
+    function extractFromProductDetails(results, seen) {
+        const headerCells = document.querySelectorAll(PRODUCT_DETAILS_SELECTOR);
+        for (const headerCell of headerCells) {
+            const headerText = headerCell.textContent?.trim() ?? '';
+            if (!headerText.includes(BEST_SELLERS_RANK_LABEL)) {
+                continue;
+            }
+            const detailsCell = headerCell.nextElementSibling;
+            if (!(detailsCell instanceof HTMLElement)) {
+                continue;
+            }
+            const spans = detailsCell.querySelectorAll('span');
+            for (const span of spans) {
+                const link = span.querySelector('a');
+                const parentText = link?.parentElement?.textContent ?? '';
+                const match = parentText.match(RANK_AND_CATEGORY_PATTERN);
+                const absoluteHref = toAbsolute(link?.getAttribute('href') ?? null);
+                if (match === null || link === null || absoluteHref === null) {
+                    continue;
+                }
+                pushMatchedResult(results, seen, match, absoluteHref, link.textContent ?? undefined);
+            }
+        }
+    }
+    function extractFromDetailBullets(results, seen) {
+        const bulletItems = document.querySelectorAll(`#${DETAIL_BULLETS_ID} li`);
+        for (const bulletItem of bulletItems) {
+            const bulletText = bulletItem.textContent ?? '';
+            if (!bulletText.includes(BEST_SELLERS_RANK_LABEL)) {
+                continue;
+            }
+            const anchors = bulletItem.querySelectorAll('a');
+            for (const anchor of anchors) {
+                const parentText = anchor.parentElement?.textContent ?? '';
+                const match = parentText.match(RANK_AND_CATEGORY_PATTERN);
+                const absoluteHref = toAbsolute(anchor.getAttribute('href'));
+                if (match === null || absoluteHref === null) {
+                    continue;
+                }
+                pushMatchedResult(results, seen, match, absoluteHref, anchor.textContent ?? undefined);
+            }
+            const textMatch = bulletItem.innerText.match(INLINE_RANK_AND_CATEGORY_PATTERN);
+            if (textMatch !== null) {
+                pushMatchedResult(results, seen, textMatch, window.location.href);
+            }
+        }
+    }
+    function extractBsrLinks() {
+        if (!isAmazonProductPage()) {
+            setStoredLinks([]);
+            return;
+        }
+        try {
+            const results = [];
+            const seen = new Set();
+            extractFromProductDetails(results, seen);
+            extractFromDetailBullets(results, seen);
+            setStoredLinks(results);
+            updateBadge();
+        }
+        catch (error) {
+            console.error('BSR extraction failed:', error);
+            setStoredLinks([]);
+            updateBadge();
+        }
+    }
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+        const incomingMessage = message;
+        if (!isGetBsrDataRequest(incomingMessage)) {
+            return;
+        }
+        sendResponse({
+            isAmazonProductPage: isAmazonProductPage(),
+            pageUrl: window.location.href,
+            links: getStoredLinks()
+        });
     });
-  });
-
-  // Initial extraction
-  if (isAmazonProductPage()) {
-    extractBSRLinks();
-  }
-
-  // Debounced MutationObserver to handle dynamic content efficiently
-  const targetNode = document.getElementById('detailBulletsWrapper_feature_div') || document.body;
-  const observer = new MutationObserver(() => {
-    clearTimeout(extractionTimeout);
-    extractionTimeout = setTimeout(() => {
-      extractBSRLinks();
-    }, 300); // Debounce to avoid excessive extractions
-  });
-
-  if (isAmazonProductPage()) {
+    if (!isAmazonProductPage()) {
+        return;
+    }
+    extractBsrLinks();
+    const targetNode = document.getElementById(DETAIL_BULLETS_ID) ?? document.body;
+    const observer = new MutationObserver(() => {
+        if (extractionTimeout !== undefined) {
+            window.clearTimeout(extractionTimeout);
+        }
+        extractionTimeout = window.setTimeout(() => {
+            extractBsrLinks();
+        }, EXTRACTION_DEBOUNCE_MS);
+    });
     observer.observe(targetNode, {
-      childList: true,
-      subtree: true
+        childList: true,
+        subtree: true
     });
-  }
 })();
